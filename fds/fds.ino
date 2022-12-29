@@ -1,4 +1,5 @@
 #include <Arduino_FreeRTOS.h>
+#include <semphr.h>
 #include <MQ2.h>
 
 /**********Decalarations of Tasks************************/
@@ -37,7 +38,7 @@ enum SystemState
 #define   SYSTEM_CANCEL_ALARM     "0000"
 
 /**********Decalarations of Global Varaibles**************/
-
+SemaphoreHandle_t xSerialSemaphore;
 enum SystemState state;
 float smoke;
 //MQ2 mq2(smokePin);
@@ -46,12 +47,23 @@ float smoke;
 void setup() {
   
   state = INIT;
-  Serial.begin(9600); // DEBUGGING
-  pinMode(smokePin, INPUT);     // Set smoke pin as input 
-  //pinMode(buzzerPin, OUTPUT);
-  //noTone(buzzerPin);
-  //mq2.begin(); //TODO: This does calibration, we need to use this.
+  Serial.begin(9600); 
 
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB, on LEONARDO, MICRO, YUN, and other 32u4 based boards.
+  }
+
+  if ( xSerialSemaphore == NULL )  // Check to confirm that the Serial Semaphore has not already been created.
+  {
+    xSerialSemaphore = xSemaphoreCreateMutex();  // Create a mutex semaphore we will use to manage the Serial Port
+    if ( ( xSerialSemaphore ) != NULL )
+      xSemaphoreGive( ( xSerialSemaphore ) );  // Make the Serial Port available for use, by "Giving" the Semaphore.
+  }
+  if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+  {
+    Serial.println("Initalization started..");
+    xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+  }
   // Now set up two tasks to run independently.
   xTaskCreate(
     TaskBlink
@@ -74,9 +86,15 @@ void setup() {
     ,  "RaiseAlarm"
     ,  128  // Stack size
     ,  NULL
-    ,  2  // Priority
+    ,  3  // Priority
     ,  NULL );
 
+  if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+  {
+    Serial.println("Initalization Fisnhed, Setting System to ARMED state..");
+    xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+  }
+  
   // set sytem armed to armed state as soon as system initalization is complete - TODO: This needs to be check if this is correct place
   state = ARMED;
 }
@@ -108,36 +126,67 @@ void TaskBlink(void *pvParameters)  // This is a task.
 
 void TaskReadMQSensor(void *pvParameters)  // This is a task.
 {
-  // only run code if system is in ARMED state
-  if(state != ARMED) 
-  {
-    return;
-  }
-  
+  (void) pvParameters;
+  pinMode(smokePin, INPUT);
+
   for (;;)
   {
-    smoke = analogRead(smokePin);
-    if(smoke >= SMOKE_THRESHOLD_LEVEL)
+    // only run code if system is in ARMED state
+    if(state == ARMED) 
     {
-      // set system to ALARM state if smoke threshold is crossed.
-      state = ALARM;
-    }
+      smoke = analogRead(smokePin);
+      if(smoke >= SMOKE_THRESHOLD_LEVEL)
+      {
+        // set system to ALARM state if smoke threshold is crossed.
+        state = ALARM;
+        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+        {
+          Serial.print("Alarm riase bcz smoke level is:");
+          Serial.println(smoke);
+          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+        }
+      }
+      else
+      {
+        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+        {
+          Serial.print("reading MQ sensor:");
+          Serial.println(smoke);  
+          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+        }    
+      }    
 
-    vTaskDelay(1);  // one tick delay (15ms) in between reads for stability
+      vTaskDelay(1);  // one tick delay (15ms) in between reads for stability
+    }
   }
 }
 
 void TaskRaiseAlarm(void *pvParameters)  // This is a task.
-{
-  // raise alarm only is system is in alarm state
-  if(state != ALARM) 
-  {
-    return;
-  }
-
+{ 
+  //pinMode(buzzerPin, OUTPUT);
+  //noTone(buzzerPin); 
+  
   for (;;)
   {
-    tone(buzzerPin, BUZZER_TONE);
+    if(state == ALARM) 
+    {
+      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+      {
+         Serial.println("System is armed, running buzzer until alarm is not cancelled..");
+         xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+      }
+      tone(buzzerPin, BUZZER_TONE);
+    }
+    else
+    {
+      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+      {
+         Serial.println("System is not armed, running buzzer skipping buzzer..");
+         xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
+      }
+    }
+    
+    vTaskDelay(1);
   }
 }
 
