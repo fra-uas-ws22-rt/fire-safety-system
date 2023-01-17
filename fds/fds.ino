@@ -19,6 +19,10 @@ void activateYellowLED();
 /**********Decalarations of Hardware Pins****************/
 int smokePin = A0;
 int buzzerPin = A1;
+// Note sure need to check on the device
+const int redPin = 9;
+const int yellowPin = 10;
+const int greenPin = 11;
 
 /**********Decalarations of System states****************/
 enum SystemState
@@ -193,10 +197,12 @@ void TaskRaiseAlarm(void *pvParameters)  // This is a task.
 void armSystem()
 {
     state=ARMED;
+    activateGreenLED();
 }
 void disarmSystem()
 {
     state=DISARMED;
+    activateYellowLED()
 }
 
 void cancelAlarm() 
@@ -212,14 +218,21 @@ void cancelAlarm()
 
 void activateRedLED()  
 {
-
+    digitalWrite(redPin, HIGH);
+    digitalWrite(greenPin, LOW);
+    digitalWrite(yellowPin, LOW);    
 }
+
 void activateGreenLED()  
 {
-
+    digitalWrite(greenPin, HIGH);
+    digitalWrite(redPin, LOW);
+    digitalWrite(yellowPin, LOW);
 }
 
 void activateYellowLED()  
 {
-
+    digitalWrite(yellowPin, HIGH);
+    digitalWrite(redPin, LOW);
+    digitalWrite(greenPin, LOW);
 }
