@@ -22,6 +22,9 @@ void activateYellowLED();
 int smokePin = A0;
 int buzzerPin = 13;
 
+const int yellowPin = 10;
+const int greenPin = 11;
+const int redPin = 12;
 /**********Decalarations of System states****************/
 enum SystemState
 {
@@ -33,7 +36,7 @@ enum SystemState
 };
 
 /**********Decalarations of Preprossors*******************/
-#define   SMOKE_THRESHOLD_LEVEL   300
+#define   SMOKE_THRESHOLD_LEVEL   250
 #define   BUZZER_TONE             1000
 #define   SYSTEM_DISARM_CODE      "1234"
 #define   SYSTEM_ARM_CODE         "4321"
@@ -42,8 +45,10 @@ enum SystemState
 /**********Decalarations of Global Varaibles**************/
 SemaphoreHandle_t xSerialSemaphore = NULL;
 SemaphoreHandle_t xStateSemaphore = NULL;
+
 enum SystemState state;
 float smoke;
+
 const byte ROWS = 4; 
 const byte COLS = 4; 
 
@@ -67,6 +72,11 @@ void setup() {
   Serial.begin(9600); 
   pinMode(smokePin, INPUT);
   pinMode(buzzerPin, OUTPUT);
+
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(yellowPin, OUTPUT);
+  
   digitalWrite(buzzerPin, HIGH);
 
   while (!Serial) {
@@ -117,7 +127,8 @@ void setup() {
   }
   
   //set sytem armed to armed state as soon as system initalization is complete - TODO: This needs to be check if this is correct place
-  state = ARMED;
+  //state = ARMED;
+  armSystem();
 }
 
 void loop()
@@ -174,6 +185,8 @@ void TaskRaiseAlarm(void *pvParameters)  // This is a task.
          Serial.println("System is armed, running buzzer..");
          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
       }
+      greenLED(LOW);
+      redLED(HIGH);
       digitalWrite(buzzerPin, LOW);
     }
     else
@@ -183,6 +196,8 @@ void TaskRaiseAlarm(void *pvParameters)  // This is a task.
          Serial.println("System not armed, skipping buzzer..");
          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
       }
+      redLED(LOW);
+      if(state == ARMED) { greenLED(HIGH); } // this is not right but for now it is a work arround
       digitalWrite(buzzerPin, HIGH);
     }
     vTaskDelay(1);
@@ -223,11 +238,16 @@ void TaskReadKeypad(void *pvParameters)  // This is a task.
 }
 
 void armSystem() {
+  redLED(LOW);
+  yellowLED(LOW);
+  greenLED(HIGH);
   state = ARMED;
 }
 
 void disarmSystem() {
   digitalWrite(buzzerPin, HIGH);
+  greenLED(LOW);
+  yellowLED(HIGH);
   state = DISARMED;
 }
 
@@ -241,17 +261,17 @@ void cancelAlarm() {
   digitalWrite(buzzerPin, HIGH);
 }
 
-void activateRedLED()  
+void redLED(int pSwitch)  
 {
-
+  digitalWrite(redPin, pSwitch);
 }
 
-void activateGreenLED()  
+void greenLED(int pSwitch)  
 {
-
+  digitalWrite(greenPin, pSwitch); 
 }
 
-void activateYellowLED()  
+void yellowLED(int pSwitch)  
 {
-
+  digitalWrite(yellowPin, pSwitch);    
 }
