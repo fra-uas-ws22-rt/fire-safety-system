@@ -1,6 +1,7 @@
 #include <Arduino_FreeRTOS.h>
 #include <semphr.h>
 #include <Keypad.h>
+#include <task.h>
 
 /**********Decalarations of Tasks************************/
 void TaskBlink( void *pvParameters );
@@ -9,6 +10,7 @@ void TaskRaiseAlarm( void *pvParameters );
 void TaskReadKeypad( void *pvParameters );
 
 /**********Decalarations of Functions********************/
+void setSystemState();
 void armSystem();
 void disarmSystem();
 void cancelAlarm();
@@ -38,7 +40,8 @@ enum SystemState
 #define   SYSTEM_CANCEL_ALARM     "0000"
 
 /**********Decalarations of Global Varaibles**************/
-SemaphoreHandle_t xSerialSemaphore;
+SemaphoreHandle_t xSerialSemaphore = NULL;
+SemaphoreHandle_t xStateSemaphore = NULL;
 enum SystemState state;
 float smoke;
 const byte ROWS = 4; 
@@ -64,7 +67,7 @@ void setup() {
   Serial.begin(9600); 
   pinMode(smokePin, INPUT);
   pinMode(buzzerPin, OUTPUT);
-  noTone(buzzerPin);
+  digitalWrite(buzzerPin, HIGH);
 
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB, on LEONARDO, MICRO, YUN, and other 32u4 based boards.
@@ -76,6 +79,7 @@ void setup() {
     if ( ( xSerialSemaphore ) != NULL )
       xSemaphoreGive( ( xSerialSemaphore ) );  // Make the Serial Port available for use, by "Giving" the Semaphore.
   }
+  
   if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
   {
     Serial.println("Initalization started..");
@@ -112,7 +116,7 @@ void setup() {
     xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
   }
   
-  // set sytem armed to armed state as soon as system initalization is complete - TODO: This needs to be check if this is correct place
+  //set sytem armed to armed state as soon as system initalization is complete - TODO: This needs to be check if this is correct place
   state = ARMED;
 }
 
@@ -138,7 +142,7 @@ void TaskReadMQSensor(void *pvParameters)  // This is a task.
       {
         // set system to ALARM state if smoke threshold is crossed.
         state = ALARM;
-        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 1 ) == pdTRUE )
         {
           Serial.print("Alarm riase bcz smoke level is: ");
           Serial.println(smoke);
@@ -147,7 +151,7 @@ void TaskReadMQSensor(void *pvParameters)  // This is a task.
       }
       else
       {
-        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+        if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 1 ) == pdTRUE )
         {
           Serial.print("reading MQ sensor: ");
           Serial.println(smoke);  
@@ -160,28 +164,26 @@ void TaskReadMQSensor(void *pvParameters)  // This is a task.
 }
 
 void TaskRaiseAlarm(void *pvParameters)  // This is a task.
-{ 
-  //pinMode(buzzerPin, OUTPUT);
-  //noTone(buzzerPin); 
+{
   for (;;)
   {
     if(state == ALARM) 
     {
-      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 1 ) == pdTRUE )
       {
          Serial.println("System is armed, running buzzer..");
          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
       }
-      tone(buzzerPin, BUZZER_TONE);
+      digitalWrite(buzzerPin, LOW);
     }
     else
     {
-      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 5 ) == pdTRUE )
+      if ( xSemaphoreTake( xSerialSemaphore, ( TickType_t ) 1 ) == pdTRUE )
       {
          Serial.println("System not armed, skipping buzzer..");
          xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
       }
-      noTone(buzzerPin);
+      digitalWrite(buzzerPin, HIGH);
     }
     vTaskDelay(1);
   }
@@ -192,62 +194,51 @@ void TaskReadKeypad(void *pvParameters)  // This is a task.
   for (;;) {
     char key = customKeypad.getKey();
     if (key == 'D') {
-      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
+      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)1) == pdTRUE) {
         Serial.println("D Pressed,.");
-        disarmSystem();
         xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
       }
+      disarmSystem();
     } else if (key == 'A') {
-      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
+      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)1) == pdTRUE) {
         Serial.println("A Pressed,..");
-        armSystem();
         xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
       }
+      armSystem();
     } else if (key == 'C') {
-      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
+      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)1) == pdTRUE) {
         Serial.println("C Pressed, ..");
-        cancelAlarm();
         xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
       }
+      cancelAlarm();
     } else if (key == 'B') {
-      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
+      if (xSemaphoreTake(xSerialSemaphore, (TickType_t)1) == pdTRUE) {
         Serial.println("B Pressed, ..");
-        state = ALARM;
         xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
       }
+      state = ALARM;
     }
-    vTaskDelay(1);
+    //vTaskDelay(1);
   }
 }
 
 void armSystem() {
-  if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
-    Serial.println("Setting system ARMED");
-    xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
-  }
   state = ARMED;
 }
 
 void disarmSystem() {
-  if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
-    Serial.println("Setting system DISARMED");
-    xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
-  }
+  digitalWrite(buzzerPin, HIGH);
   state = DISARMED;
 }
 
 void cancelAlarm() {
   // cancel alarm only works if system is in alarm state, otherwise skip
   if (state != ALARM) {
-    if (xSemaphoreTake(xSerialSemaphore, (TickType_t)5) == pdTRUE) {
-      Serial.println("CancelAlarmCalled, Not Alarm state..");
-      xSemaphoreGive(xSerialSemaphore);  // Now free or "Give" the Serial Port for others.
-    }
     return;
   }
 
   armSystem();
-  noTone(buzzerPin);
+  digitalWrite(buzzerPin, HIGH);
 }
 
 void activateRedLED()  
